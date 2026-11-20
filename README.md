@@ -118,6 +118,10 @@ python meta_dashboard.py --demo --open # 메타 대시보드
 - 애즈 비용이 GA4에 들어오기까지 하루 정도 걸립니다. 그래서 대시보드는 어제까지를 완성본으로 봅니다.
 - CSV 수집은 브라우저 에이전트가 하므로 매체 로그인이 풀리면 그날 수집이 빠집니다. 로그와 `data/csv/날짜/` 파일 수로 확인합니다.
 
+## 앞으로 할 일
+
+- **서버에 올리기**: 지금은 제 PC의 작업 스케줄러가 매일 수집하고 결과는 HTML 파일을 직접 열어 봅니다. 그래서 PC가 꺼져 있으면 그날 수집이 빠집니다. 추후 서버에 올려 PC와 상관없이 매일 돌게 하고 팀원이 주소로 접속해 볼 수 있게 할 예정입니다.
+
 ## 사용 기술
 
 Python 3.12 · GA4 Data API (`google-analytics-data`) · Chart.js 4 · marked · Playwright (스크린샷) · PowerShell · Windows 작업 스케줄러 · Claude Code CLI
