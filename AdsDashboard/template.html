@@ -145,6 +145,18 @@ document.getElementById('title').textContent = `${CONFIG.brand} 구글 검색광
 const csvDays = [...new Set(DATA.keywords.map(r => r.date))].sort();
 document.getElementById('meta').textContent =
   `갱신 ${DATA.updated} · 구글 애즈 CSV(${csvDays.length ? csvDays.at(-1) + '까지' : '아직 없음'}) + GA4`;
+// 수집이 멈춘 날을 빨간 줄로 알린다 (빠진 날은 다음 자동 수집 때 한 번에 채운다)
+if (DATA.missing && DATA.missing.length) {
+  const runs = [];
+  for (const d of DATA.missing) {
+    const last = runs.at(-1), prev = last && new Date(new Date(last[1]).getTime() + 864e5).toISOString().slice(0, 10);
+    if (prev === d) last[1] = d; else runs.push([d, d]);
+  }
+  const txt = runs.map(([a, b]) => a === b ? a.slice(5) : `${a.slice(5)}~${b.slice(5)}`).join(', ');
+  document.getElementById('meta').insertAdjacentHTML('afterend',
+    `<p class="missing">CSV 빠진 날 ${DATA.missing.length}일: ${esc(txt)} (다음 자동 수집 때 함께 받음)</p>`);
+}
+
 document.getElementById('adNotes').textContent = CONFIG.adNotes || '';
 if (CONFIG.studyPage) document.getElementById('notesHint').insertAdjacentHTML('beforeend',
   ` 계정 구조와 설정 순서는 <a href="${esc(CONFIG.studyPage)}" target="_blank">구조 정리 페이지</a>에 있습니다.`);

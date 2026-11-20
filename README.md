@@ -52,22 +52,38 @@
 ## 동작 방식
 
 ```
-매일 09:00 Windows 작업 스케줄러
-  └ fetch_csv.ps1 / fetch_meta.ps1
-      ├ 브라우저 에이전트가 '어제' 기준 보고서 CSV만 내려받음 (읽기 전용, 저장 · 수정 금지 지시)
+매일 09:00 Windows 작업 스케줄러 / macOS launchd
+  └ fetch_csv.ps1 · fetch_meta.ps1 (Windows) / fetch_csv.sh · fetch_meta.sh (macOS)
+      ├ 빠진 날이 있는지 먼저 확인 (python ads_dashboard.py --missing)
+      ├ 브라우저 에이전트가 보고서 CSV만 내려받음 (읽기 전용, 저장 · 수정 금지 지시)
+      │   빠진 날이 없으면 '어제' 하루, 있으면 그날부터 어제까지를 일별로 나눈 표 한 장
       ├ 내려받은 CSV를 data/csv/YYYY-MM-DD/ 로 정리
       ├ insights.py: 구글 변경 내역 CSV에 새 변경이 있으면 Claude CLI가 해설 노트 작성 (없으면 호출 안 함)
       └ ads_dashboard.py / meta_dashboard.py
           ├ 매체 CSV  → 노출수 · 클릭수 · 광고비 · 전환수
           ├ GA4 API   → 세션 · 참여 · 주요 이벤트 (최근 60일을 매번 다시 받아 늦게 잡힌 전환까지 반영)
           └ template.html + 공통 CSS · JS → dashboard.html 한 장
+      └ 그래도 빠진 날이 남으면 데스크톱 알림 + 대시보드 상단에 빨간 줄
 ```
+
+## 수집이 멈췄던 문제와 보완
+
+운영 중에 구글은 일주일, 메타는 닷새 넘게 매체 CSV가 비었는데 한동안 아무도 몰랐습니다. 원인과 고친 내용입니다.
+
+| 문제 | 원인 | 보완 |
+|---|---|---|
+| 실패해도 아무도 모름 | 작업 스케줄러는 스크립트가 끝나기만 하면 결과를 0(성공)으로 남기고, 대시보드 갱신 시각도 GA4만으로 매일 바뀜 | 수집 뒤 빠진 날을 다시 세어 남아 있으면 데스크톱 알림을 띄우고 대시보드 상단에 `CSV 빠진 날 7일: 11-13~11-19`처럼 빨간 줄로 표시 |
+| 하루 놓치면 계속 빔 | 스크립트가 '어제' 하루만 받아서, 실패한 날은 누가 손으로 받기 전까지 영영 비어 있음 | 시작일부터 어제까지 빠진 날을 스스로 찾아 그 구간을 일별로 나눈 표 한 장으로 받음. 한 번만 성공하면 밀린 날이 한꺼번에 채워짐. 구글은 '일' 열로, 메타는 보고 시작=종료인 행으로 날짜별로 나눠 읽음 |
+| 메타 지시문 한글이 `?`로 깨짐 | Windows PowerShell 5.1이 외부 프로그램 파이프로 넘기는 글자를 시스템 코드 페이지로 바꿈 | 지시문을 UTF-8 파일로 저장하고 `cmd /c "claude ... < 파일"`로 바이트 그대로 넘김 |
+| 브라우저 에이전트가 멈춤 | 에이전트가 쓰는 AI 서비스의 사용량 한도 초과, 크롬 확장 연결 끊김 | 실패 이유(`FAIL=EXTENSION`, usage limit)를 로그에 남기고, 다음 실행 때 위 따라잡기로 자동 복구 |
+
+빠진 날은 키워드 표와 광고 표 기준으로 셉니다. 검색어 표는 클릭이 없는 날 원래 비어 있을 수 있어서 판단에서 뺐습니다.
 
 ## 설계에서 신경 쓴 점
 
 - **광고 계정에 흔적을 남기지 않음**: 구글 애즈 API로 접속하지 않습니다. 애즈와 연결된 GA4 데이터와 화면의 '내보내기'만 씁니다.
 - **같은 지표는 한 출처에서만**: 노출수 · 클릭수 · 광고비 · 전환수는 매체 CSV, 세션 · 참여는 GA4에서 가져옵니다. 두 출처를 섞어 더하지 않습니다.
-- **한쪽이 실패해도 화면은 뜸**: GA4가 막히면 CSV만으로, CSV가 비면 GA4만으로 그립니다. 수집 실패는 로그 파일에 남깁니다.
+- **한쪽이 실패해도 화면은 뜸**: GA4가 막히면 CSV만으로, CSV가 비면 GA4만으로 그립니다. 수집 실패는 로그 파일과 화면 상단 빨간 줄에 남깁니다.
 - **회사 정보는 코드 밖에**: GA4 속성 번호, 광고 계정 번호, 캠페인 이름 규칙, 키 파일 경로는 `config.json`에만 둡니다. 이 파일은 저장소에 올리지 않고 생성된 HTML에도 키 경로나 계정 번호를 넣지 않습니다.
 - **파일 한 장으로 공유**: 두 대시보드가 같이 쓰는 CSS · JS(`adkit.css`, `adkit.js`)를 빌드할 때 HTML 안에 끼워 넣습니다. 받는 사람은 더블클릭만 하면 됩니다.
 
@@ -78,13 +94,14 @@ AdsDashboard/               구글 검색광고
   adkit.py / .css / .js     두 대시보드 공통 도구 (설정, GA4 호출, HTML 조립, 차트·표 함수)
   ads_dashboard.py          애즈 CSV + GA4 → dashboard.html
   insights.py               변경 내역 → 설정 변경 해설 노트 (Claude CLI)
-  fetch_csv.ps1             매일 CSV 수집 · 정리 · 빌드
+  fetch_csv.ps1 / .sh       매일 CSV 수집 · 정리 · 빌드 (Windows / macOS)
   make_sample.py            데모용 가짜 데이터 생성
   config.example.json       설정 예시 (복사해서 config.json으로)
 MetaAdsDashboard/           메타 광고
   meta_dashboard.py         광고 관리자 CSV + GA4 → dashboard.html
   read_settings.py          설정 내보내기 → '현재 설정과 설정 이유' 표
-  fetch_meta.ps1            매일 CSV 수집 · 정리 · 빌드
+  fetch_meta.ps1 / .sh      매일 CSV 수집 · 정리 · 빌드 (Windows / macOS)
+setup_mac.sh                macOS 자동 실행(launchd) 등록 · 해제
 ```
 
 ## 실행해 보기
@@ -104,7 +121,11 @@ python meta_dashboard.py --demo --open # 메타 대시보드
 
 1. `AdsDashboard/config.example.json`을 `config.json`으로 복사해 GA4 속성 번호, 캠페인 필터, 광고그룹 · 소재 표시명을 채웁니다.
 2. GA4 속성에 서비스 계정을 '뷰어'로 추가하고 키 파일 경로를 `ga4_key_file`에 적습니다.
-3. `python ads_dashboard.py --open`으로 실행합니다. 매일 자동으로 돌리려면 `fetch_csv.ps1`을 작업 스케줄러에 등록합니다.
+3. `python ads_dashboard.py --open`으로 실행합니다.
+4. 매일 자동으로 돌리기
+   - **Windows**: `fetch_csv.ps1`, `fetch_meta.ps1`을 작업 스케줄러에 등록합니다. 바로 열기는 `open_dashboard.bat`.
+   - **macOS**: 저장소 맨 위에서 `bash setup_mac.sh`를 한 번 실행하면 매일 09:00(구글) · 09:20(메타)에 돌도록 launchd에 등록됩니다. 해제는 `bash setup_mac.sh --remove`. 바로 열기는 Finder에서 `open_dashboard.command`를 더블클릭합니다. Mac이 잠자는 동안 9시가 지나면 깨어난 뒤 한 번 실행됩니다.
+   - 두 OS 모두 브라우저 수집에는 [Claude Code CLI](https://claude.com/claude-code)와 크롬의 Claude 확장이 필요합니다. macOS 스크립트는 구글 · 메타 모두 크롬으로 받습니다.
 
 ## 보안
 
@@ -116,7 +137,7 @@ python meta_dashboard.py --demo --open # 메타 대시보드
 
 - GA4의 `sessionGoogleAdsKeyword`는 광고비 지표와 함께 조회할 수 없어서 키워드 단위 비용은 애즈 CSV에 의존합니다.
 - 애즈 비용이 GA4에 들어오기까지 하루 정도 걸립니다. 그래서 대시보드는 어제까지를 완성본으로 봅니다.
-- CSV 수집은 브라우저 에이전트가 하므로 매체 로그인이 풀리면 그날 수집이 빠집니다. 로그와 `data/csv/날짜/` 파일 수로 확인합니다.
+- CSV 수집은 브라우저 에이전트가 하므로 매체 로그인이 풀리거나 확장 연결이 끊기면 수집이 멈춥니다. 멈춘 동안은 알림과 빨간 줄로 알려 주고 다시 연결되면 다음 실행 때 밀린 날을 채웁니다.
 
 ## 앞으로 할 일
 
@@ -124,4 +145,4 @@ python meta_dashboard.py --demo --open # 메타 대시보드
 
 ## 사용 기술
 
-Python 3.12 · GA4 Data API (`google-analytics-data`) · Chart.js 4 · marked · Playwright (스크린샷) · PowerShell · Windows 작업 스케줄러 · Claude Code CLI
+Python 3.12 · GA4 Data API (`google-analytics-data`) · Chart.js 4 · marked · Playwright (스크린샷) · PowerShell · Bash · Windows 작업 스케줄러 · macOS launchd · Claude Code CLI

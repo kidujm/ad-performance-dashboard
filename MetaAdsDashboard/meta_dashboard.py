@@ -105,6 +105,7 @@ def load_csv(start):
 def collect(cfg):
     data = {"updated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "start": cfg["start_date"]}
     data.update(load_csv(cfg["start_date"]))
+    data["missing"] = adkit.missing_days(cfg["start_date"], {r["date"] for r in data["daily"]})
     try:
         data["ga"] = collect_ga4(cfg)
     except Exception as e:  # GA4가 막혀도 광고 관리자 숫자로는 그린다
@@ -126,6 +127,9 @@ def view_config(cfg):
 
 def main():
     cfg = adkit.load_config()
+    if "--missing" in sys.argv:  # fetch_meta.ps1용: 빠진 날 중 가장 이른 날짜(없으면 빈 줄)
+        miss = adkit.missing_days(cfg["start_date"], {r["date"] for r in load_csv(cfg["start_date"])["daily"]})
+        return print(miss[0] if miss else "")
     data = json.loads(SAMPLE_FILE.read_text(encoding="utf-8")) if "--demo" in sys.argv else collect(cfg)
     adkit.render_html(TEMPLATE, OUTPUT, DATA=data, CONFIG=view_config(cfg))
     print(f"updated {data['updated']}  daily={len(data['daily'])}  totals={len(data['totals'])}  ga={len(data['ga'])}")

@@ -72,6 +72,12 @@ def read_ads_csv(path, campaign_filter):
     return date, head, out
 
 
+def day_key(text):
+    """'2026-11-13', '2026. 11. 13.', '2026년 11월 13일' 모두 'YYYY-MM-DD'로. 합계 줄 등은 None."""
+    m = re.search(r"(\d{4})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})", text or "")
+    return f"{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}" if m else None
+
+
 def ad_name(row):
     """광고 이름은 최종 도착 URL 접미사의 utm_content 값으로 구분한다."""
     m = re.search(r"utm_content=([^&]+)", row.get("최종 도착 URL 접미사", ""))
@@ -97,14 +103,24 @@ def load_ads_csv(cfg):
                         "imp": adkit.num(d.get("노출수")), "clk": adkit.num(d.get("클릭수") or d.get("상호작용 수")),
                         "cost": adkit.num(d.get("비용")), "conv": adkit.num(d.get("전환수"))}
 
-            if "검색어" in head:
-                terms[date] = [dict(base(d), term=d["검색어"], keyword=d.get("키워드", ""),
-                                    match=d.get("검색 유형", "")) for d in rows]
-            elif "키워드" in head:
-                kw[date] = [dict(base(d), keyword=d["키워드"], match=d.get("검색 유형", ""),
-                                 qs=d.get("품질평가점수", "").strip()) for d in rows]
-            elif "광고 효력" in head:
-                ads[date] = [dict(base(d), name=ad_name(d), strength=d.get("광고 효력", "")) for d in rows]
+            # 빠진 날을 한 번에 받은 파일은 '일' 열로 나뉘어 있다 → 날짜별로 쪼갠다
+            day_col = next((h for h in ("일", "날짜", "Day") if h in head), None)
+            if day_col:
+                by_day = {}
+                for d in rows:
+                    by_day.setdefault(day_key(d[day_col]), []).append(d)
+                by_day.pop(None, None)
+            else:
+                by_day = {date: rows}
+            for date, rows in by_day.items():
+                if "검색어" in head:
+                    terms[date] = [dict(base(d), term=d["검색어"], keyword=d.get("키워드", ""),
+                                        match=d.get("검색 유형", "")) for d in rows]
+                elif "키워드" in head:
+                    kw[date] = [dict(base(d), keyword=d["키워드"], match=d.get("검색 유형", ""),
+                                     qs=d.get("품질평가점수", "").strip()) for d in rows]
+                elif "광고 효력" in head:
+                    ads[date] = [dict(base(d), name=ad_name(d), strength=d.get("광고 효력", "")) for d in rows]
     flat = lambda m: [r for v in m.values() for r in v]
     return {"keywords": flat(kw), "terms": flat(terms), "ads": flat(ads)}
 
@@ -128,6 +144,9 @@ def collect(cfg):
     except Exception as e:  # GA4가 막혀도 애즈 CSV 숫자로는 그린다
         print(f"ga4 skipped: {e}")
     data.update(load_ads_csv(cfg))
+    # 검색어 표는 클릭이 없는 날 비어 있을 수 있어 키워드·광고 표만으로 빠진 날을 판단한다
+    have = {r["date"] for r in data["keywords"]} & {r["date"] for r in data["ads"]}
+    data["missing"] = adkit.missing_days(cfg["start_date"], have)
     data["insights"] = load_insights()
     DATA_FILE.parent.mkdir(exist_ok=True)
     DATA_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -142,7 +161,18 @@ def view_config(cfg):
             "studyPage": g.get("study_page", "")}
 
 
+def print_missing():
+    """fetch_csv.ps1용: 빠진 날 중 가장 이른 날짜를 한 줄로(없으면 빈 줄)."""
+    cfg = adkit.load_config()
+    d = load_ads_csv(cfg)
+    have = {r["date"] for r in d["keywords"]} & {r["date"] for r in d["ads"]}
+    miss = adkit.missing_days(cfg["start_date"], have)
+    print(miss[0] if miss else "")
+
+
 def main():
+    if "--missing" in sys.argv:
+        return print_missing()
     cfg = adkit.load_config()
     demo = "--demo" in sys.argv
     data = json.loads(SAMPLE_FILE.read_text(encoding="utf-8")) if demo else collect(cfg)

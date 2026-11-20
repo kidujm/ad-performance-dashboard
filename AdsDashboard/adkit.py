@@ -49,6 +49,18 @@ def korean_date(text):
     return f"{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}" if m else None
 
 
+def missing_days(start, have):
+    """캠페인 시작일부터 어제까지 중 CSV가 없는 날짜 목록. 수집이 멈춘 걸 알아채고 따라잡는 데 쓴다."""
+    import datetime as dt
+    day, last = dt.date.fromisoformat(start), dt.date.today() - dt.timedelta(days=1)
+    out = []
+    while day <= last:
+        if day.isoformat() not in have:
+            out.append(day.isoformat())
+        day += dt.timedelta(days=1)
+    return out
+
+
 def day_folders(root):
     """data/csv/YYYY-MM-DD/ 폴더를 날짜순으로. 같은 날짜를 다시 받으면 뒤에 읽은 값이 이긴다."""
     return sorted(p for p in Path(root).glob("*") if p.is_dir())

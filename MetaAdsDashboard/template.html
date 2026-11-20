@@ -107,6 +107,18 @@ const csvDays = [...new Set(DATA.daily.map(r => r.date))].sort();
 document.getElementById('meta').innerHTML = `갱신 ${esc(DATA.updated)} · 광고 관리자 CSV(${csvDays.length ? esc(csvDays.at(-1)) + '까지' : '하루치 없음, 기간 합계 사용'}) + GA4 · 통화 ${esc(CUR)}` +
   (CONFIG.bookPdf ? ` · <a href="${esc(CONFIG.bookPdf)}" target="_blank">참고 PDF</a>` : '');
 
+// 수집이 멈춘 날을 빨간 줄로 알린다 (빠진 날은 다음 자동 수집 때 한 번에 채운다)
+if (DATA.missing && DATA.missing.length) {
+  const runs = [];
+  for (const d of DATA.missing) {
+    const last = runs.at(-1), prev = last && new Date(new Date(last[1]).getTime() + 864e5).toISOString().slice(0, 10);
+    if (prev === d) last[1] = d; else runs.push([d, d]);
+  }
+  const txt = runs.map(([a, b]) => a === b ? a.slice(5) : `${a.slice(5)}~${b.slice(5)}`).join(', ');
+  document.getElementById('meta').insertAdjacentHTML('afterend',
+    `<p class="missing">CSV 빠진 날 ${DATA.missing.length}일: ${esc(txt)} (다음 자동 수집 때 함께 받음)</p>`);
+}
+
 // 기간: 0이면 캠페인 시작일부터 어제까지
 const range = (n, shift = 0) => +n ? lastNDays(+n, shift) : [DATA.start, LAST_DAY];
 

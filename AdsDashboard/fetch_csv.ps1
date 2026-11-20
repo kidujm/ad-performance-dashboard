@@ -8,6 +8,17 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
 $log = Join-Path $logDir "fetch-$stamp.log"
 function Log($m) { "$(Get-Date -Format 'HH:mm:ss') $m" | Out-File $log -Append -Encoding utf8 }
 
+# 수집이 멈췄으면 윈도우 알림을 띄운다 (스케줄러 결과는 실패해도 0이라 따로 알려야 한다)
+function Notify($title, $text) {
+  Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+  $n = New-Object System.Windows.Forms.NotifyIcon
+  $n.Icon = [System.Drawing.SystemIcons]::Warning
+  $n.Visible = $true
+  $n.ShowBalloonTip(15000, $title, $text, 'Warning')
+  Start-Sleep 16
+  $n.Dispose()
+}
+
 $yesterday = (Get-Date).AddDays(-1).ToString('yyyy-MM-dd')
 $downloads = Join-Path $env:USERPROFILE 'Downloads'
 $aside = Join-Path $env:LOCALAPPDATA 'Aside\CLI\current\aside.exe'
@@ -15,6 +26,16 @@ $asideApp = 'C:\Program Files\Aside\Application\Aside.exe'
 $start = Get-Date
 # 계정 주소 등 회사 고유값은 config.json에서 읽는다 (저장소에는 올리지 않는 파일)
 $cfg = Get-Content (Join-Path $base 'config.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$py = (Get-Command python).Source
+
+# 지난 실행이 실패해 빠진 날이 있으면 그날부터 어제까지 일별로 한 번에 받는다
+$from = (& $py (Join-Path $base 'ads_dashboard.py') --missing | Out-String).Trim()
+if ($from -and $from -lt $yesterday) {
+  $range = "기간은 맞춤 '$from ~ $yesterday'로 맞추고, 표 위 세그먼트 > 시간 > '일'을 켠 상태로"
+  Log "catch up from $from"
+} else {
+  $range = "기간은 '어제'로 맞춘 뒤"
+}
 
 # 1) 메모리 정리: Aside가 무거우면 껐다 켠다
 $asideMb = [int]((Get-Process Aside -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum / 1MB)
@@ -38,7 +59,7 @@ $prompt = @"
 READ-ONLY. 탭 1개만 사용. 하위 에이전트 금지. 전체 스냅샷·스크린샷 금지, 버튼은 글자로 찾기.
 저장/적용/게시/수정, 열 변경, 필터 저장, 권장사항 적용 금지.
 $($cfg.google.ads_keywords_url)
-보기는 '모든 캠페인', 기간은 '어제'로 맞춘 뒤 아래 표를 각각 다운로드 > .csv:
+보기는 '모든 캠페인', $range 아래 표를 각각 다운로드 > .csv (변경 내역은 세그먼트 없이):
 1) 키워드 > 검색 키워드 표
 2) 인사이트 및 보고서 > 검색어 표
 3) 캠페인 > 광고 표
@@ -68,9 +89,10 @@ foreach ($f in $files) {
 if (-not $files) { Log 'no csv downloaded' }
 
 # 4) 새 설정 변경이 있으면 해설 노트 생성 (없으면 바로 끝남)
-$py = (Get-Command python).Source
 & $py (Join-Path $base 'insights.py') 2>&1 | Out-File $log -Append -Encoding utf8
 
 # 5) GA4 수집 + 대시보드 갱신
 & $py (Join-Path $base 'ads_dashboard.py') 2>&1 | Out-File $log -Append -Encoding utf8
+$left = (& $py (Join-Path $base 'ads_dashboard.py') --missing | Out-String).Trim()
+if ($left) { Log "still missing from $left"; Notify '구글 광고 대시보드' "CSV 수집 실패: $left 부터 빠져 있음. 로그 $log" }
 Log 'done'
