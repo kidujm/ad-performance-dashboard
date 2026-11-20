@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메타 광고 성과 대시보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/*__COMMON_CSS__*/
+/* 메타 전용: 설정 표, 전환 퍼널 */
+td.why { white-space:normal; color:var(--sub); font-size:13px; min-width:280px; }
+td.set { white-space:normal; font-weight:600; min-width:160px; }
+.funnel { display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; }
+.step { border:1px solid var(--line); border-radius:6px; padding:12px; }
+.step .s { color:var(--sub); font-size:12px; }
+.step .n { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+.step .r { font-size:12px; margin-top:6px; color:var(--sub); }
+.step .r b { color:var(--text); }
+.note { color:var(--sub); font-size:12px; margin-top:10px; }
+@media screen and (max-width:900px) { .funnel { grid-template-columns:repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="title">메타 광고 성과</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="controls">
+      <select id="period" aria-label="기간">
+        <option value="1">어제</option>
+        <option value="7">최근 7일</option>
+        <option value="14">최근 14일</option>
+        <option value="0" selected>캠페인 시작일부터</option>
+      </select>
+    </div>
+  </header>
+
+  <section class="kpi-groups" id="kpis"></section>
+
+  <div class="card">
+    <h2>전환 퍼널</h2>
+    <p class="hint">노출에서 전환까지 단계별로 남은 사람 수입니다. 아래 % 는 바로 앞 단계 대비 전환율입니다.</p>
+    <div class="funnel" id="funnel"></div>
+    <div class="note" id="funnelNote"></div>
+  </div>
+
+  <div class="card">
+    <h2>일별 광고비 · 링크 클릭수 추이</h2>
+    <p class="hint">막대는 광고 소재별 광고비, 선은 전체 링크 클릭수입니다. 일일 예산보다 더 쓴 날이 있어도 정상입니다: 메타는 날마다 더 쓰거나 덜 쓰고, 한 주(일~토) 합계를 일일 예산의 7배 안으로 맞춥니다.</p>
+    <div class="chart"><canvas id="daily"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>광고 소재 성과</h2>
+    <p class="hint">같은 광고 세트 안에서는 메타가 반응이 좋은 소재에 예산을 몰아줍니다. 광고비가 한쪽에 쏠리는 것이 정상입니다.</p>
+    <div class="scroll"><table id="ads"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>광고 소재별 사이트 행동 (GA4)</h2>
+    <p class="hint">광고 링크의 utm_content(광고 이름)로 GA4 세션을 나눴습니다. 참여 세션 = 10초 넘게 머물렀거나 2페이지 이상 봤거나 주요 이벤트가 난 세션.</p>
+    <div class="scroll"><table id="ga"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>현재 설정과 설정 이유</h2>
+    <p class="hint" id="settingsHint">광고 관리자 설정 내보내기를 그대로 옮기고, 메타 권장 방식에 비춰 왜 이렇게 했는지 붙였습니다.</p>
+    <div class="scroll"><table id="settings"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>용어 풀이</h2>
+    <dl class="terms">
+      <dt>도달</dt><dd>광고를 한 번 이상 본 사람 수 (중복 제거)</dd>
+      <dt>빈도</dt><dd>노출수 ÷ 도달. 한 사람이 평균 몇 번 봤는지</dd>
+      <dt>CPM</dt><dd>노출 1,000회당 비용. 광고비 ÷ 노출수 × 1,000</dd>
+      <dt>CTR</dt><dd>링크 클릭률. 링크 클릭수 ÷ 노출수</dd>
+      <dt>CPC</dt><dd>링크 클릭당 비용. 광고비 ÷ 링크 클릭수</dd>
+      <dt>LPV</dt><dd>랜딩 페이지 조회. 링크를 누르고 페이지가 끝까지 뜬 횟수</dd>
+      <dt>전환수</dt><dd>광고 세트에 지정한 맞춤 전환이 일어난 횟수 (광고 관리자의 '결과')</dd>
+      <dt>CPA</dt><dd>전환당 비용. 광고비 ÷ 전환수</dd>
+      <dt>품질 순위</dt><dd>같은 타겟을 두고 경쟁한 광고 대비 소재 품질 (평균 이상 · 평균 · 평균 이하)</dd>
+      <dt>전기</dt><dd>고른 기간 바로 앞의 같은 길이 기간</dd>
+    </dl>
+  </div>
+</div>
+
+<script>
+/*__COMMON_JS__*/
+
+const DATA = /*__DATA__*/null;
+const CONFIG = /*__CONFIG__*/null;
+const CUR = (DATA.daily[0] || DATA.totals[0] || {}).cur || 'USD';
+const money = moneyFmt(CUR);
+const KEYS = ['spend', 'imp', 'reach', 'link', 'clk', 'lpv', 'res', 'ses', 'eng', 'key', 'new', 'dur'];
+const sum = rows => sumBy(rows, KEYS);
+
+// 광고 소재 표시명·색 (config.json의 meta.ads)
+const A = labeler(CONFIG.ads);
+
+document.title = `${CONFIG.brand} 메타 광고 성과`;
+document.getElementById('title').textContent = `${CONFIG.brand} 메타 광고 성과`;
+const csvDays = [...new Set(DATA.daily.map(r => r.date))].sort();
+document.getElementById('meta').innerHTML = `갱신 ${esc(DATA.updated)} · 광고 관리자 CSV(${csvDays.length ? esc(csvDays.at(-1)) + '까지' : '하루치 없음, 기간 합계 사용'}) + GA4 · 통화 ${esc(CUR)}` +
+  (CONFIG.bookPdf ? ` · <a href="${esc(CONFIG.bookPdf)}" target="_blank">참고 PDF</a>` : '');
+
+// 기간: 0이면 캠페인 시작일부터 어제까지
+const range = (n, shift = 0) => +n ? lastNDays(+n, shift) : [DATA.start, LAST_DAY];
+
+// 광고 단계 행: 하루치가 있으면 그것, 전체 기간인데 하루치가 없으면 기간 합계 파일
+function adRows(n, shift = 0) {
+  const d = DATA.daily.filter(r => r.level === 'ad').filter(inRange(range(n, shift)));
+  if (d.length || +n) return { rows: d, total: false };
+  return { rows: DATA.totals.filter(r => r.level === 'ad'), total: true };
+}
+// 도달은 소재끼리 겹치므로 광고 세트 단계 기간 합계를 쓴다 (전체 기간에서만 정확)
+function reachOf(n, rows) {
+  const set = !+n ? DATA.totals.filter(r => r.level === 'adset') : [];
+  if (set.length) return { reach: set.reduce((a, r) => a + r.reach, 0), exact: true };
+  return { reach: rows.reduce((a, r) => a + r.reach, 0), exact: false };
+}
+const gaPart = s => ({ ses: s.ses, eng: s.eng, key: s.key, new: s.new, dur: s.dur });
+
+let chart;
+function render() {
+  const n = document.getElementById('period').value;
+  const { rows, total } = adRows(n);
+  const prev = +n ? adRows(n, 1).rows : [];
+  const ga = DATA.ga.filter(inRange(range(n)));
+  const gaPrev = +n ? DATA.ga.filter(inRange(range(n, 1))) : [];
+  const t = { ...sum(rows), ...gaPart(sum(ga)) }, p = { ...sum(prev), ...gaPart(sum(gaPrev)) };
+  const rc = reachOf(n, rows);
+  const unit = (a, b) => b ? a / b : 0;
+  const d = (...args) => +n ? delta(...args) : '';  // 전체 기간에는 비교할 전기가 없다
+
+  renderKpis('kpis', [
+    { title: '도달 · 유입', items: [
+      ['노출수 · 도달', `빈도 ${rc.reach ? (t.imp / rc.reach).toFixed(2) : '-'}회${rc.exact ? '' : ' (소재별 합, 겹침 포함)'}`,
+        `${num(t.imp)} · ${num(rc.reach)}`, d(t.imp, p.imp, num, 'up')],
+      ['링크 클릭수', '광고 링크를 누른 횟수', num(t.link), d(t.link, p.link, num, 'up')],
+      ['CTR', '링크 클릭수 ÷ 노출수', pct(t.link, t.imp), ''],
+    ] },
+    { title: '비용 효율', items: [
+      ['광고비', `기간 합계 (${CUR})`, money(t.spend), d(t.spend, p.spend, money)],
+      ['CPM', '노출 1,000회당 비용', ratio(money, t.spend * 1000, t.imp), d(unit(t.spend * 1000, t.imp), unit(p.spend * 1000, p.imp), money, 'down')],
+      ['CPC', '광고비 ÷ 링크 클릭수', ratio(money, t.spend, t.link), d(unit(t.spend, t.link), unit(p.spend, p.link), money, 'down')],
+    ] },
+    { title: '전환 · 사이트 행동', items: [
+      ['전환수', '맞춤 전환 (광고 관리자 결과)', num(t.res), d(t.res, p.res, num, 'up')],
+      ['CPA', '광고비 ÷ 전환수', ratio(money, t.spend, t.res), d(unit(t.spend, t.res), unit(p.spend, p.res), money, 'down')],
+      ['세션 · 참여율', 'GA4 · 참여 세션 ÷ 세션', `${num(t.ses)} · ${pct(t.eng, t.ses)}`, d(t.ses, p.ses, num, 'up')],
+    ] },
+  ]);
+
+  const steps = [['노출수', t.imp], ['링크 클릭수', t.link], ['LPV', t.lpv], ['GA4 세션', t.ses], ['참여 세션', t.eng], ['전환수', t.res]];
+  document.getElementById('funnel').innerHTML = steps.map(([l, v], i) =>
+    `<div class="step"><div class="s">${l}</div><div class="n">${num(v)}</div>` +
+    `<div class="r">${i ? `앞 단계의 <b>${pct(v, steps[i - 1][1])}</b>` : '&nbsp;'}</div></div>`).join('');
+  const [s, e] = range(n);
+  document.getElementById('funnelNote').textContent = (total
+    ? '하루치 CSV가 아직 없어 캠페인 시작일부터의 합계로 보여줍니다.'
+    : `${s} ~ ${e}`) +
+    ' · GA4 세션이 LPV보다 많을 수 있습니다: 메타는 페이지가 다 뜬 경우만 세고, GA4는 같은 사람이 광고 링크로 다시 들어온 방문도 셉니다.';
+
+  drawChart(n);
+  drawAds(rows, ga);
+  drawGa(ga);
+}
+
+// 그래프도 고른 기간을 따른다
+function drawChart(n) {
+  const rows = DATA.daily.filter(r => r.level === 'ad').filter(inRange(range(n)));
+  const box = document.getElementById('daily').parentElement;
+  if (!rows.length) {
+    chart?.destroy(); chart = null;
+    box.querySelector('.empty') || box.insertAdjacentHTML('beforeend', '<div class="empty">이 기간에는 하루치 CSV가 없습니다.</div>');
+    document.getElementById('daily').hidden = true;
+    return;
+  }
+  box.querySelector('.empty')?.remove();
+  document.getElementById('daily').hidden = false;
+  chart = stackedDailyChart(document.getElementById('daily'), chart, {
+    rows, seriesOf: r => r.name, order: A.rank, label: A.name, color: A.color,
+    valueKey: 'spend', lineKey: 'link', lineLabel: '링크 클릭수', money,
+  });
+}
+
+// 품질 순위는 노출이 쌓여야 나오므로 하루치보다 기간 합계 파일의 값을 우선한다
+function qRank(name, last) {
+  const t = DATA.totals.find(r => r.level === 'ad' && r.name === name && r.q_rank && r.q_rank !== '-');
+  const v = t ? t.q_rank : last.q_rank;
+  return v && v !== '-' ? v.split(' - ')[0] : '판정 전';  // '평균 이하 - 하위 35%' → '평균 이하'
+}
+
+function drawAds(rows, ga) {
+  if (!rows.length) return emptyTable('ads', '이 기간에는 광고 CSV가 없습니다.');
+  const g = Object.fromEntries(groupRows(ga, r => r.ad, KEYS).map(i => [i.r.ad, i.s]));
+  const items = groupRows(rows, r => r.name, KEYS).sort((x, y) => y.s.spend - x.s.spend);
+  const max = Math.max(...items.map(i => i.s.spend), 1);
+  document.getElementById('ads').innerHTML =
+    head(['l:소재', 'l:광고 이름', '광고비', '노출수', '링크 클릭수', ['CTR', '링크 클릭수 ÷ 노출수'], ['CPC', '광고비 ÷ 링크 클릭수'],
+      ['LPV', '랜딩 페이지 조회'], ['전환수', '맞춤 전환'], ['CPA', '광고비 ÷ 전환수'], ['l:품질 순위', '경쟁 광고 대비 소재 품질'], 'GA4 세션', ['참여율', '참여 세션 ÷ 세션']]) + '<tbody>' +
+    items.map(({ r, s, last }) => {
+      const k = r.name, x = g[k] || { ses: 0, eng: 0 };
+      return `<tr><td class="l" style="color:${A.color(k)};font-weight:600">${esc(A.name(k))}</td><td class="l">${esc(k)}</td>` +
+        `<td>${bar(s.spend, max, A.color(k))}${money(s.spend)}</td><td>${num(s.imp)}</td><td>${num(s.link)}</td><td>${pct(s.link, s.imp)}</td>` +
+        `<td>${ratio(money, s.spend, s.link)}</td><td>${num(s.lpv)}</td><td>${num(s.res)}</td><td>${ratio(money, s.spend, s.res)}</td>` +
+        `<td class="l">${esc(qRank(k, last))}</td><td>${num(x.ses)}</td><td>${pct(x.eng, x.ses)}</td></tr>`;
+    }).join('') + '</tbody>';
+}
+
+function drawGa(ga) {
+  const items = groupRows(ga, r => r.ad, KEYS).sort((x, y) => y.s.ses - x.s.ses);
+  if (!items.length) return emptyTable('ga', '이 기간에는 GA4 데이터가 없습니다.');
+  // {{ad.name}} 이 그대로 남은 값은 광고 미리보기 클릭처럼 매개변수가 치환되지 않은 방문
+  const label = k => CONFIG.ads[k] ? A.name(k) : (k.includes('{{') ? '치환 안 된 주소(미리보기 클릭 등)' : '-');
+  document.getElementById('ga').innerHTML =
+    head(['l:utm_content', 'l:소재', '세션', '신규 사용자', '참여 세션', ['참여율', '참여 세션 ÷ 세션'], '평균 체류 시간', ['주요 이벤트', 'GA4 집계']]) + '<tbody>' +
+    items.map(({ r, s }) => `<tr><td class="l">${esc(r.ad)}</td><td class="l">${esc(label(r.ad))}</td>` +
+      `<td>${num(s.ses)}</td><td>${num(s.new)}</td><td>${num(s.eng)}</td><td>${pct(s.eng, s.ses)}</td>` +
+      `<td>${s.ses ? Math.round(s.dur / s.ses) + '초' : '-'}</td><td>${num(s.key)}</td></tr>`).join('') + '</tbody>';
+}
+
+function drawSettings() {
+  const st = DATA.settings || {};
+  const rows = st.rows || [];
+  if (st.source) document.getElementById('settingsHint').textContent = st.source;
+  if (!rows.length) return emptyTable('settings', '설정 내보내기 파일이 아직 없습니다.');
+  document.getElementById('settings').innerHTML = head(['l:단계', 'l:항목', 'l:현재 설정', 'l:설정 이유']) + '<tbody>' +
+    rows.map(r => `<tr><td class="l">${esc(r.level)}</td><td class="l">${esc(r.item)}</td><td class="l set">${esc(r.value)}</td><td class="l why">${esc(r.why)}</td></tr>`).join('') + '</tbody>';
+}
+
+document.getElementById('period').onchange = render;
+drawSettings();
+render();
+</script>
+</body>
+</html>

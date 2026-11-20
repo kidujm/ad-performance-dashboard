@@ -1,0 +1,33 @@
+{
+  "brand": "샘플브랜드",
+  "ga4_property_id": "000000000",
+  "ga4_key_file": "~/.gcp/ga4-service-account.json",
+  "campaign_filter": "000000",
+  "start_date": "2026-01-01",
+  "landing_url": "example.com",
+
+  "google": {
+    "days": 60,
+    "campaign_prefix": "SAMPLE_Google_KR_SEARCH_",
+    "ads_keywords_url": "https://ads.google.com/aw/keywords",
+    "adgroups": {
+      "INTENT_BOOKING": ["예약 의도", "#059669"],
+      "INTENT_PRICE": ["가격 의도", "#d97706"],
+      "INTENT_USECASE": ["업종별", "#7c3aed"],
+      "BRAND": ["브랜드", "#2563eb"]
+    },
+    "study_page": "",
+    "ad_notes": "RSA_01은 제목 일부를 자리에 고정(Pin)한 광고, RSA_02는 고정하지 않은 광고입니다."
+  },
+
+  "meta": {
+    "account_id": "000000000000000",
+    "account_name": "광고 계정 이름",
+    "book_pdf": "",
+    "ads": {
+      "SAMPLE_REVIEW_01": ["후기형 소재 (이미지)", "#2563eb"],
+      "SAMPLE_SCREEN_01": ["화면 시연 소재 (영상)", "#059669"],
+      "SAMPLE_PRICE_01": ["가격 비교 소재 (이미지)", "#d97706"]
+    }
+  }
+}

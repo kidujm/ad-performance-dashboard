@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>구글 검색광고 성과 대시보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+/*__COMMON_CSS__*/
+/* 구글 전용: 키워드 표의 광고그룹 묶음 줄, 설정 변경 노트 */
+tr.group td { font-weight:700; font-size:13px; border-bottom:none; padding-top:14px; }
+tr.group td.l span.sub { font-weight:400; color:var(--sub); font-size:12px; margin-left:6px; }
+td.kw { padding-left:22px; }
+.zero td.kw { color:var(--sub); }
+.m-exact { color:var(--exact); font-weight:600; }
+.m-phrase { color:var(--phrase); font-weight:600; }
+details.note { border-top:1px solid var(--line); padding:12px 0 4px; }
+details.note:first-of-type { border-top:none; }
+details.note summary { cursor:pointer; font-weight:600; font-size:14px; }
+details.note summary .d { color:var(--sub); font-weight:400; font-size:12px; margin-right:8px; }
+.md { line-height:1.7; max-width:860px; }
+.md h1 { display:none; }
+.md h2 { font-size:15px; margin:22px 0 6px; }
+.md table { margin:8px 0; width:auto; }
+.md th, .md td { text-align:left; white-space:normal; position:static; }
+.md ul { padding-left:20px; margin:6px 0; }
+.md code { background:#f1f3f6; padding:1px 5px; border-radius:4px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="title">구글 검색광고 성과</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <div class="controls">
+      <select id="campaign" aria-label="캠페인"></select>
+      <select id="period" aria-label="기간">
+        <option value="1">어제</option>
+        <option value="7" selected>최근 7일</option>
+        <option value="14">최근 14일</option>
+        <option value="30">최근 30일</option>
+        <option value="60">최근 60일</option>
+      </select>
+    </div>
+  </header>
+
+  <section class="kpi-groups" id="kpis"></section>
+
+
+  <div class="card">
+    <h2>일별 광고비 · 클릭수 추이</h2>
+    <p class="hint">막대는 광고그룹별 광고비(색 = 광고그룹), 선은 전체 클릭수입니다.</p>
+    <div class="chart"><canvas id="daily"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>키워드 성과</h2>
+    <p class="hint">광고그룹별로 묶었습니다. 노출수는 있는데 클릭수가 0인 키워드는 광고 문구나 입찰가를 점검할 대상입니다. 회색 줄은 이 기간에 노출이 없었던 키워드입니다.</p>
+    <div class="legend">
+      <span><b class="m-exact">일치</b> [키워드] 같은 의미로 검색했을 때만 노출</span>
+      <span><b class="m-phrase">구문</b> "키워드" 의미를 포함한 검색에 노출</span>
+      <span><b>QS</b> 품질평가점수(1~10), 노출이 쌓여야 표시</span>
+    </div>
+    <div class="scroll"><table id="keywords"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>광고 소재 성과</h2>
+    <p class="hint" id="adNotes"></p>
+    <div class="scroll"><table id="ads"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>검색어 보고서</h2>
+    <p class="hint">사람들이 실제로 입력한 검색어입니다. 클릭이 없어도 노출된 검색어까지 나옵니다. 의도와 다른 검색어는 제외 키워드 후보입니다.</p>
+    <div class="scroll"><table id="terms"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>광고그룹별 사이트 행동 (GA4)</h2>
+    <p class="hint">광고를 클릭해 사이트에 들어온 뒤의 행동입니다. 참여 세션 = 10초 넘게 머물렀거나 2페이지 이상 봤거나 주요 이벤트가 난 세션.</p>
+    <div class="scroll"><table id="groups"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>클릭된 검색어의 사이트 행동 (GA4)</h2>
+    <p class="hint">클릭이 일어난 검색어만 잡힙니다.</p>
+    <div class="scroll"><table id="queries"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>설정 변경 로그</h2>
+    <p class="hint" id="notesHint">대행사가 설정을 바꾼 날마다 변경 내용과 이유를 정리해 둡니다.</p>
+    <div id="notes"></div>
+  </div>
+
+  <div class="card">
+    <h2>용어 풀이</h2>
+    <dl class="terms">
+      <dt>CTR</dt><dd>클릭률. 클릭수 ÷ 노출수. 광고 문구가 검색 의도에 맞는지 보는 지표</dd>
+      <dt>CPC</dt><dd>클릭당 비용. 광고비 ÷ 클릭수</dd>
+      <dt>CVR</dt><dd>전환율. 전환수 ÷ 클릭수. 랜딩 페이지가 행동으로 이어지는지 보는 지표</dd>
+      <dt>CPA</dt><dd>전환당 비용. 광고비 ÷ 전환수. 획득 단가</dd>
+      <dt>QS</dt><dd>품질평가점수. 예상 CTR · 광고 관련성 · 랜딩 페이지 경험을 1~10으로 매긴 값</dd>
+      <dt>전환수</dt><dd>구글 애즈에 설정한 전환 액션이 일어난 횟수 (애즈 집계)</dd>
+      <dt>주요 이벤트</dt><dd>GA4에서 주요 이벤트로 표시한 행동 수 (GA4 집계, 애즈 전환수와 기준이 다름)</dd>
+      <dt>참여율</dt><dd>참여 세션 ÷ 세션</dd>
+      <dt>전기</dt><dd>고른 기간 바로 앞의 같은 길이 기간 (최근 7일이면 그 전 7일)</dd>
+    </dl>
+  </div>
+</div>
+
+<script>
+/*__COMMON_JS__*/
+
+const DATA = /*__DATA__*/null;
+const CONFIG = /*__CONFIG__*/null;
+const won = moneyFmt('KRW');
+const KEYS = ['imp', 'clk', 'cost', 'ses', 'eng', 'key', 'conv'];
+const sum = rows => sumBy(rows, KEYS);
+
+// 광고그룹 표시명·색 (config.json의 google.adgroups)
+const G = labeler(CONFIG.adgroups);
+const gCell = g => `<td class="l" style="color:${G.color(g)};font-weight:600">${esc(G.name(g))}</td>`;
+
+// 키워드 표기: [x] 일치, "x" 구문 → 기호를 떼고 검색 유형은 색 글자로
+const kwText = k => k.replace(/^[\["]|[\]"]$/g, '');
+const matchCell = m => m.includes('일치') ? '<td class="l m-exact">일치</td>'
+  : m.includes('구문') ? '<td class="l m-phrase">구문</td>' : `<td class="l">${esc(m.replace('검색', '')) || '-'}</td>`;
+
+// 캠페인 이름에서 공통 앞뒤 글자를 떼어 짧게 보여준다
+const shortCampaign = c => c.replace(CONFIG.prefix, '').replace(CONFIG.suffix, '');
+const campaigns = [...new Set([...DATA.groups, ...DATA.keywords].map(r => r.campaign))].sort();
+const sel = document.getElementById('campaign');
+sel.innerHTML = `<option value="__all">캠페인 전체</option>` +
+  campaigns.map(c => `<option value="${esc(c)}">${esc(shortCampaign(c))}</option>`).join('');
+
+document.title = `${CONFIG.brand} 구글 검색광고 성과`;
+document.getElementById('title').textContent = `${CONFIG.brand} 구글 검색광고 성과`;
+const csvDays = [...new Set(DATA.keywords.map(r => r.date))].sort();
+document.getElementById('meta').textContent =
+  `갱신 ${DATA.updated} · 구글 애즈 CSV(${csvDays.length ? csvDays.at(-1) + '까지' : '아직 없음'}) + GA4`;
+document.getElementById('adNotes').textContent = CONFIG.adNotes || '';
+if (CONFIG.studyPage) document.getElementById('notesHint').insertAdjacentHTML('beforeend',
+  ` 계정 구조와 설정 순서는 <a href="${esc(CONFIG.studyPage)}" target="_blank">구조 정리 페이지</a>에 있습니다.`);
+
+// 고른 기간 · 캠페인에 맞는 행만
+function pick(rows, days, shift = 0) {
+  const c = sel.value;
+  return rows.filter(r => inRange(lastNDays(days, shift))(r) && (c === '__all' || r.campaign === c));
+}
+
+// 표의 공통 지표 칸
+const METRIC_HEAD = [['노출수', ''], ['클릭수', ''], ['CTR', '클릭수 ÷ 노출수'], ['광고비', ''],
+  ['CPC', '광고비 ÷ 클릭수'], ['전환수', '구글 애즈 전환 액션 수'], ['CPA', '광고비 ÷ 전환수']];
+const metricCells = (s, max, color) =>
+  `<td>${num(s.imp)}</td><td>${num(s.clk)}</td><td>${pct(s.clk, s.imp)}</td>` +
+  `<td>${bar(s.cost, max, color)}${won(s.cost)}</td><td>${ratio(won, s.cost, s.clk)}</td>` +
+  `<td>${num(s.conv)}</td><td>${ratio(won, s.cost, s.conv)}</td>`;
+
+let chart;
+function render() {
+  const days = +document.getElementById('period').value;
+  const g = pick(DATA.groups, days), q = pick(DATA.queries, days);
+  const k = pick(DATA.keywords, days), a = pick(DATA.ads, days), st = pick(DATA.terms, days);
+  // 애즈 CSV가 있으면 노출수·클릭수·광고비·전환수는 CSV(애즈 집계), 세션·참여는 GA4
+  const ga = sum(g), useCsv = k.length > 0;
+  const t = useCsv ? { ...sum(k), ses: ga.ses, eng: ga.eng, key: ga.key } : ga;
+  const pga = sum(pick(DATA.groups, days, 1));
+  const p = useCsv ? { ...sum(pick(DATA.keywords, days, 1)), ses: pga.ses, eng: pga.eng } : pga;
+  const conv = useCsv ? t.conv : t.key, pconv = useCsv ? p.conv : p.key;
+
+  renderKpis('kpis', [
+    { title: '유입', items: [
+      ['노출수', '광고가 검색 결과에 보인 횟수', num(t.imp), delta(t.imp, p.imp, num, 'up')],
+      ['클릭수', '광고를 눌러 사이트로 온 횟수', num(t.clk), delta(t.clk, p.clk, num, 'up')],
+      ['CTR', '클릭수 ÷ 노출수', pct(t.clk, t.imp), ''],
+    ] },
+    { title: '비용 효율', items: [
+      ['광고비', '기간 합계 (VAT 별도)', won(t.cost), delta(t.cost, p.cost, won)],
+      ['CPC', '광고비 ÷ 클릭수', ratio(won, t.cost, t.clk), delta(t.clk ? t.cost / t.clk : 0, p.clk ? p.cost / p.clk : 0, won, 'down')],
+      ['CPA', '광고비 ÷ 전환수', ratio(won, t.cost, conv), delta(conv ? t.cost / conv : 0, pconv ? p.cost / pconv : 0, won, 'down')],
+    ] },
+    { title: '전환 · 사이트 행동', items: [
+      [useCsv ? '전환수' : '주요 이벤트', useCsv ? '구글 애즈 전환 액션' : 'GA4 주요 이벤트 (애즈 CSV 없음)', num(conv), delta(conv, pconv, num, 'up')],
+      ['CVR', '전환수 ÷ 클릭수', pct(conv, t.clk), ''],
+      ['세션 · 참여율', 'GA4 · 참여 세션 ÷ 세션', `${num(t.ses)} · ${pct(t.eng, t.ses)}`, delta(t.ses, p.ses, num, 'up')],
+    ] },
+  ]);
+
+  chart = stackedDailyChart(document.getElementById('daily'), chart, {
+    rows: useCsv ? k : g, seriesOf: r => r.adgroup, order: G.rank, label: G.name, color: G.color,
+    valueKey: 'cost', lineKey: 'clk', lineLabel: '클릭수', money: won,
+  });
+  drawKeywords(k);
+  drawAds(a);
+  drawTerms(st);
+  gaTable('groups', g, r => r.adgroup, [r => gCell(r.adgroup), r => `<td class="l">${esc(shortCampaign(r.campaign))}</td>`], ['l:광고그룹', 'l:캠페인'], true);
+  gaTable('queries', q, r => r.query + '\u0000' + r.adgroup, [r => `<td class="l">${esc(r.query)}</td>`, r => gCell(r.adgroup)], ['l:검색어', 'l:광고그룹'], false);
+}
+
+function drawKeywords(rows) {
+  if (!rows.length) return emptyTable('keywords', '이 기간에는 구글 애즈 CSV가 없습니다.');
+  const items = groupRows(rows, r => r.adgroup + '\u0000' + r.keyword, KEYS);
+  const byGroup = {};
+  items.forEach(i => (byGroup[i.r.adgroup] ||= []).push(i));
+  const max = Math.max(...items.map(i => i.s.cost), 1);
+  let html = head(['l:키워드', ['l:검색 유형', '일치 · 구문 · 확장'], ['l:QS', '품질평가점수'], ...METRIC_HEAD]) + '<tbody>';
+  Object.keys(byGroup).sort((x, y) => G.rank(x) - G.rank(y)).forEach(gr => {
+    const list = byGroup[gr].sort((x, y) => y.s.cost - x.s.cost || y.s.imp - x.s.imp
+      || kwText(x.r.keyword).localeCompare(kwText(y.r.keyword)) || x.r.match.localeCompare(y.r.match));
+    const s = sumBy(list.map(i => i.s), KEYS);
+    const color = G.color(gr);
+    html += `<tr class="group" style="background:${color}12"><td class="l" colspan="3" style="color:${color}">${esc(G.name(gr))}` +
+      `<span class="sub">${esc(gr)} · 키워드 ${list.length}개</span></td>${metricCells(s, max, color)}</tr>`;
+    html += list.map(({ r, s }) => `<tr class="${s.imp ? '' : 'zero'}"><td class="l kw">${esc(kwText(r.keyword))}</td>` +
+      `${matchCell(r.match)}<td class="l">${r.qs && r.qs !== '--' ? esc(r.qs) : '-'}</td>${metricCells(s, max, color)}</tr>`).join('');
+  });
+  document.getElementById('keywords').innerHTML = html + '</tbody>';
+}
+
+// 광고 소재: 광고그룹 순서 → 광고 이름 순
+function drawAds(rows) {
+  const items = groupRows(rows, r => r.adgroup + '\u0000' + r.name, KEYS)
+    .sort((x, y) => G.rank(x.r.adgroup) - G.rank(y.r.adgroup) || x.r.name.localeCompare(y.r.name));
+  if (!items.length) return emptyTable('ads', '이 기간에는 구글 애즈 CSV가 없습니다.');
+  const max = Math.max(...items.map(i => i.s.cost), 1);
+  document.getElementById('ads').innerHTML =
+    head(['l:광고그룹', 'l:광고', ['l:광고 효력', '구글이 매긴 반응형 검색 광고 구성 점수'], ...METRIC_HEAD]) + '<tbody>' +
+    items.map(({ r, s }) => `<tr class="${s.imp ? '' : 'zero'}">${gCell(r.adgroup)}<td class="l">${esc(r.name)}</td>` +
+      `<td class="l">${esc(r.strength)}</td>${metricCells(s, max, G.color(r.adgroup))}</tr>`).join('') + '</tbody>';
+}
+
+// 검색어: 광고비 → 노출수 순
+function drawTerms(rows) {
+  const items = groupRows(rows, r => r.term + '\u0000' + r.adgroup, KEYS).sort((x, y) => y.s.cost - x.s.cost || y.s.imp - x.s.imp);
+  if (!items.length) return emptyTable('terms', '이 기간에는 검색어 데이터가 없습니다.');
+  const max = Math.max(...items.map(i => i.s.cost), 1);
+  document.getElementById('terms').innerHTML = head(['l:검색어', 'l:광고그룹', 'l:검색 유형', ...METRIC_HEAD]) + '<tbody>' +
+    items.map(({ r, s }) => `<tr><td class="l">${esc(r.term)}</td>${gCell(r.adgroup)}${matchCell(r.match)}` +
+      metricCells(s, max, G.color(r.adgroup)) + '</tr>').join('') + '</tbody>';
+}
+
+function gaTable(id, rows, keyOf, cells, heads, withImp) {
+  const items = groupRows(rows, keyOf, KEYS).sort((x, y) => y.s.cost - x.s.cost || y.s.ses - x.s.ses);
+  if (!items.length) return emptyTable(id, '이 기간에는 GA4 데이터가 없습니다.');
+  const max = Math.max(...items.map(i => i.s.cost), 1);
+  document.getElementById(id).innerHTML =
+    head([...heads, ...(withImp ? ['노출수'] : []), '클릭수', '광고비', '세션', ['참여율', '참여 세션 ÷ 세션'], ['주요 이벤트', 'GA4 집계']]) + '<tbody>' +
+    items.map(({ r, s }) => '<tr>' + cells.map(f => f(r)).join('') + (withImp ? `<td>${num(s.imp)}</td>` : '') +
+      `<td>${num(s.clk)}</td><td>${bar(s.cost, max, G.color(r.adgroup))}${won(s.cost)}</td>` +
+      `<td>${num(s.ses)}</td><td>${pct(s.eng, s.ses)}</td><td>${num(s.key)}</td></tr>`).join('') + '</tbody>';
+}
+
+// 설정 변경 로그: 최신 노트만 펼쳐 둔다
+function renderNotes() {
+  const box = document.getElementById('notes');
+  const notes = DATA.insights || [];
+  if (!notes.length) { box.innerHTML = '<div class="empty">아직 기록이 없습니다.</div>'; return; }
+  // 노트는 LLM이 웹 검색으로 쓴 글이라 HTML로 넣기 전에 DOMPurify로 거른다
+  const md = s => window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(s)) : `<pre>${esc(s)}</pre>`;
+  box.innerHTML = notes.map((n, i) => `<details class="note"${i ? '' : ' open'}>` +
+    `<summary><span class="d">${esc(n.date)}</span>${esc(n.title)}</summary><div class="md">${md(n.md)}</div></details>`).join('');
+  box.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+}
+
+
+sel.onchange = render;
+document.getElementById('period').onchange = render;
+renderNotes();
+render();
+</script>
+</body>
+</html>
