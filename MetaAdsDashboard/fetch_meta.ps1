@@ -49,6 +49,9 @@ $settings
 Log 'claude chrome start'
 $job = Start-Job -ScriptBlock {
   param($p)
+  # Windows PowerShell 5.1은 외부 프로그램에 넘기는 글자를 ASCII로 바꿔 한글이 '?'가 된다 → UTF-8로 고정
+  $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+  [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
   $p | & claude -p --chrome --model sonnet --allowedTools 'mcp__claude-in-chrome__*' 2>&1
 } -ArgumentList $prompt
 if (Wait-Job $job -Timeout 1200) { Receive-Job $job | Out-String | Out-File $log -Append -Encoding utf8 } else { Stop-Job $job; Log 'claude timeout (20m)' }
