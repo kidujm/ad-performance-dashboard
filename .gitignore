@@ -12,3 +12,6 @@ dashboard.html
 sample/
 __pycache__/
 *.pyc
+
+# 로컬 도구 상태 폴더
+.omc/

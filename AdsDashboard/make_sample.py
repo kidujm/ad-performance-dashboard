@@ -64,12 +64,24 @@ def google():
             ses = gc + rnd.randint(0, 3)
             groups.append({"date": d, "campaign": camp, "adgroup": g, "imp": gi, "clk": gc, "cost": gcost,
                            "ses": ses, "eng": int(ses * rnd.uniform(0.45, 0.75)), "key": gconv})
-    insight = ("# 샘플 노트: 제외 키워드 추가\n\n## 한 줄 요약\n- **바뀐 것:** 의도와 다른 검색어 2개를 제외 키워드로 추가\n"
-               "- **이유:** 검색어 보고서에서 클릭은 나는데 전환이 없는 검색어 발견\n- **지켜볼 것:** CPC와 CVR 변화\n\n"
-               "## 무엇이 바뀌었나: 제외 키워드 추가\n- **이유:** 예약과 무관한 정보성 검색에 광고비가 쓰이고 있었습니다.\n")
+    # 설정 변경 로그 예시. 실제 계정의 변경이 아니라 가상으로 쓴 노트다
+    insight = ("# (가상 예시) 제외 키워드 추가와 입찰가 조정\n\n"
+               "> 이 노트는 화면 예시를 위해 가상으로 작성했습니다. 실제 계정의 설정 변경이 아닙니다.\n\n"
+               "## 한 줄 요약\n"
+               "- **바뀐 것:** 정보성 검색어 2개를 제외 키워드로 추가, 가격 의도 그룹 입찰가 10% 인하\n"
+               "- **이유:** 클릭은 나는데 전환이 없는 검색어에 광고비가 쓰임\n"
+               "- **지켜볼 것:** 가격 의도 그룹의 CPC · CVR 변화\n\n"
+               "## 무엇이 바뀌었나: 제외 키워드 추가\n"
+               "- **변경:** \"예약 프로그램 무료 다운로드\", \"예약 시스템 개발 방법\"을 구문 제외 키워드로 등록\n"
+               "- **이유:** 직접 만들 방법을 찾는 검색이라 서비스 가입으로 이어질 가능성이 낮음\n"
+               "- **공부 포인트:** 제외 키워드는 유사 변형(띄어쓰기 · 오타)을 자동으로 막아 주지 않아 표기별로 따로 넣어야 함\n\n"
+               "## 무엇이 바뀌었나: 입찰가 10% 인하\n"
+               "- **이유:** 가격 의도 그룹의 CPA가 다른 그룹보다 높음\n"
+               "- **학습 기간:** 입찰 전략을 바꾼 것이 아니라 금액만 조정해 학습이 처음부터 다시 시작되지는 않음 (추정)\n\n"
+               "## 지켜볼 것\n- 가격 의도 그룹의 노출수가 크게 줄지 않는지\n- 검색어 보고서에 비슷한 정보성 검색어가 새로 생기는지\n")
     return {"updated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "groups": groups, "queries": queries,
             "keywords": keywords, "terms": terms, "ads": ads,
-            "insights": [{"date": DAYS[-7], "title": "샘플 노트: 제외 키워드 추가", "md": insight}]}
+            "insights": [{"date": DAYS[-7], "title": "(가상 예시) 제외 키워드 추가와 입찰가 조정", "md": insight}]}
 
 
 META_ADS = ["SAMPLE_REVIEW_01", "SAMPLE_SCREEN_01", "SAMPLE_PRICE_01"]
@@ -95,7 +107,7 @@ def meta():
     totals = [{"level": "ad", "name": n, "start": start, "end": DAYS[-1], "q_rank": q, "reach": 0, "spend": 0, "cur": "USD"}
               for n, q in zip(META_ADS, ["평균 이상", "평균", "판정 전"])]
     totals.append({"level": "adset", "name": "SAMPLE_ADSET", "start": start, "end": DAYS[-1], "reach": 48000, "spend": 0, "cur": "USD"})
-    settings = {"source": "샘플 설정입니다. 실제 계정 설정이 아닙니다.", "changes": [], "rows": [
+    settings = {"source": "가상 예시입니다. 설정과 이유 모두 실제 계정이 아니라 화면 예시를 위해 작성했습니다.", "changes": [], "rows": [
         {"level": "캠페인", "item": "목표", "value": "판매", "why": "클릭이 아니라 사이트 안의 전환 행동을 할 사람을 찾도록 판매(전환) 목표를 씀"},
         {"level": "광고 세트", "item": "입찰 전략", "value": "최대 볼륨 (자동 입찰)", "why": "전환 기록이 쌓이기 전이라 목표 단가를 정할 근거가 없음"},
         {"level": "광고 세트", "item": "타겟", "value": "Advantage+ 타겟 · 나이 하한만 지정", "why": "나이 · 관심사는 힌트로만 주고 메타가 넓게 찾게 함"},
