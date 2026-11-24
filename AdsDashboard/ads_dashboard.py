@@ -170,9 +170,42 @@ def print_missing():
     print(miss[0] if miss else "")
 
 
+def ingest(since, yesterday):
+    """fetch_csv.ps1용: Downloads에서 since(유닉스 초) 이후 받은 CSV를 검사해 옮긴다.
+    여러 날 기간인데 '일' 열이 없는 합계 파일·차트 파일은 data/_rejected 로 빼서 빈 날로 남긴다(11-24 사고)."""
+    import shutil
+    down = Path.home() / "Downloads"
+    rej = BASE / "data" / "_rejected"
+    for f in sorted(down.glob("*.csv")):
+        if f.stat().st_mtime < since:
+            continue
+        try:
+            with f.open(encoding="utf-8-sig") as fh:
+                rows = [r for _, r in zip(range(3), csv.reader(fh))]
+        except (OSError, UnicodeDecodeError, csv.Error):
+            rows = []
+        head = rows[2] if len(rows) > 2 else []
+        dates = re.findall(r"(\d{4})년 (\d{1,2})월 (\d{1,2})일", rows[1][0] if len(rows) > 1 and rows[1] else "")
+        days = [f"{y}-{int(m):02d}-{int(d):02d}" for y, m, d in dates]
+        kind = next((k for k, key in (("검색어", "검색어"), ("키워드", "키워드"), ("광고", "광고 효력")) if key in head), None)
+        if any("변경" in h for h in head):
+            dest = CSV_DIR / yesterday / "변경 내역 보고서.csv"
+        elif kind and days and (len(set(days)) == 1 or "일" in head):
+            dest = CSV_DIR / days[0] / f"{kind}_{days[0]}_{days[-1]}.csv"
+        else:
+            dest = rej / f"{dt.datetime.now():%Y%m%d-%H%M}_{f.name}"
+            print(f"rejected {f.name} (기간 {days}, 일 열 {'일' in head})")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(f), dest)
+        print(f"moved {f.name} -> {dest.parent.name}/{dest.name}")
+
+
 def main():
     if "--missing" in sys.argv:
         return print_missing()
+    if "--ingest" in sys.argv:
+        i = sys.argv.index("--ingest")
+        return ingest(float(sys.argv[i + 1]), sys.argv[i + 2])
     cfg = adkit.load_config()
     demo = "--demo" in sys.argv
     data = json.loads(SAMPLE_FILE.read_text(encoding="utf-8")) if demo else collect(cfg)

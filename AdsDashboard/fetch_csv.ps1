@@ -30,14 +30,23 @@ $py = (Get-Command python).Source
 
 # 지난 실행이 실패해 빠진 날이 있으면 그날부터 어제까지 일별로 한 번에 받는다
 $from = (& $py (Join-Path $base 'ads_dashboard.py') --missing | Out-String).Trim()
+# 빠진 날이 없으면(오전에 이미 받았으면) 브라우저는 건너뛰고 GA4·대시보드만 갱신한다 → 하루 여러 번 돌려도 안전
+$needFetch = [bool]$from
 if ($from -and $from -lt $yesterday) {
-  $range = "기간은 맞춤 '$from ~ $yesterday'로 맞추고, 표 위 세그먼트 > 시간 > '일'을 켠 상태로"
-  Log "catch up from $from"
+  # 구글 애즈는 기간이 14일을 넘으면 '일' 세그먼트가 꺼져 합계만 받아진다(11-24 사고) → 7일 단위로 나눠 받는다
+  $chunks = @(); $d = [datetime]$from
+  while ($d -le [datetime]$yesterday) {
+    $e = $d.AddDays(6); if ($e -gt [datetime]$yesterday) { $e = [datetime]$yesterday }
+    $chunks += "'$($d.ToString('yyyy-MM-dd')) ~ $($e.ToString('yyyy-MM-dd'))'"; $d = $e.AddDays(1)
+  }
+  $range = "기간을 맞춤 " + ($chunks -join ', ') + " 로 하나씩 바꿔 가며, 기간마다 표 위 세그먼트 > 시간 > '일'을 켠 상태로(표에 '일' 열이 생긴 것 확인)"
+  Log "catch up from $from ($($chunks.Count) chunks)"
 } else {
   $range = "기간은 '어제'로 맞춘 뒤"
 }
 
 # 1) 메모리 정리: Aside가 무거우면 껐다 켠다
+if ($needFetch) {
 $asideMb = [int]((Get-Process Aside -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum / 1MB)
 $freeMb = [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024)
 Log "free=${freeMb}MB aside=${asideMb}MB"
@@ -77,16 +86,10 @@ for ($try = 1; $try -le 6; $try++) {
   Start-Sleep 20
 }
 
-# 3) 이번에 받은 CSV를 날짜 폴더로 옮긴다
-$dest = Join-Path $base "data\csv\$yesterday"
-New-Item -ItemType Directory -Force $dest | Out-Null
-$files = Get-ChildItem $downloads -Filter '*.csv' -File | Where-Object { $_.LastWriteTime -ge $start }
-foreach ($f in $files) {
-  $name = $f.Name -replace ' \(\d+\)', ''
-  Move-Item $f.FullName (Join-Path $dest $name) -Force
-  Log "moved $name"
-}
-if (-not $files) { Log 'no csv downloaded' }
+# 3) 이번에 받은 CSV를 검사해 기간 시작일 폴더로 옮긴다. 날짜 구분 없는 합계·차트 파일은 data\_rejected 로 뺀다
+$since = ([DateTimeOffset]$start).ToUnixTimeSeconds()
+& $py (Join-Path $base 'ads_dashboard.py') --ingest $since $yesterday 2>&1 | Out-File $log -Append -Encoding utf8
+} else { Log 'nothing missing, skip browser' }
 
 # 4) 새 설정 변경이 있으면 해설 노트 생성 (없으면 바로 끝남)
 & $py (Join-Path $base 'insights.py') 2>&1 | Out-File $log -Append -Encoding utf8
